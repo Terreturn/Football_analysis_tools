@@ -1,0 +1,17 @@
+# Scraped data output files
+sofascore_*.json
+sofascore_*.csv
+*_fa_cup_*.json
+*_match_*.json
+*_season_*.json
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/

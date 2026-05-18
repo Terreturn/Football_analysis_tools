@@ -1,0 +1,7 @@
+{
+  "pythonPath": "/usr/local/bin/python3",
+  "venvPath": "/Users/terreturn/Library/Python/3.13",
+  "extraPaths": [
+    "/Users/terreturn/Library/Python/3.13/lib/python/site-packages"
+  ]
+}
