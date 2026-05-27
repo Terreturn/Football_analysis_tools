@@ -12,6 +12,8 @@ A collection of football data analysis and visualization projects using open-sou
 
 Builds match-level and season-level passing networks from StatsBomb free event data.
 
+> Approach and methodology based on the work of **Victoria Friss de Kereki** — Sports Analytics & Data Science.
+
 **Pipeline:**
 1. Fetch pass events via `statsbombpy`
 2. Clean coordinates and filter starters
