@@ -44,3 +44,9 @@ conda create -n footballnetwork python=3.10
 conda activate footballnetwork
 pip install statsbombpy mplsoccer pandas numpy scipy tqdm matplotlib
 ```
+
+---
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

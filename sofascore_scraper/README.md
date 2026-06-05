@@ -233,3 +233,7 @@ Recommended practices:
 - Europa League: `679`
 - Chinese Super League: `155`
 
+## License
+
+This project is licensed under the MIT License. See [../LICENSE](../LICENSE) for details.
+
