@@ -14,11 +14,13 @@ import argparse
 import asyncio
 import json
 import random
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlencode
 
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
 
@@ -117,6 +119,19 @@ METRIC_FIELDS: dict[str, list[str]] = {
 }
 
 
+COMMON_TOURNAMENTS = [
+    {"type": "league", "id": 17, "name": "Premier League", "extra": "England"},
+    {"type": "league", "id": 8, "name": "La Liga", "extra": "Spain"},
+    {"type": "league", "id": 35, "name": "Bundesliga", "extra": "Germany"},
+    {"type": "league", "id": 23, "name": "Serie A", "extra": "Italy"},
+    {"type": "league", "id": 34, "name": "Ligue 1", "extra": "France"},
+    {"type": "cup", "id": 7, "name": "Champions League", "extra": "Europe"},
+    {"type": "cup", "id": 679, "name": "Europa League", "extra": "Europe"},
+    {"type": "cup", "id": 19, "name": "FA Cup", "extra": "England"},
+    {"type": "league", "id": 155, "name": "Chinese Super League", "extra": "China"},
+]
+
+
 @dataclass
 class ScrapeConfig:
     tournament_type: TournamentType
@@ -190,9 +205,9 @@ class BrowserApiClient:
         return {}
 
     def _build_url(self, path: str, params: dict[str, Any] | None) -> str:
-        url = f"{BASE_URL}{path}"
+        url = path if path.startswith("https://") else f"{BASE_URL}{path}"
         if params:
-            query = "&".join(f"{key}={value}" for key, value in params.items())
+            query = urlencode(params)
             url = f"{url}?{query}"
         return url
 
@@ -228,7 +243,6 @@ class BrowserApiClient:
             """,
             url,
         )
-
 
 class HierarchicalScraper:
     def __init__(self, client: BrowserApiClient, config: ScrapeConfig) -> None:
@@ -421,14 +435,101 @@ def parse_team_ids(raw: str | None) -> list[int]:
     return [int(item.strip()) for item in raw.split(",") if item.strip()]
 
 
+def print_lookup_rows(rows: list[dict[str, Any]], limit: int) -> None:
+    rows = rows[:limit]
+    if not rows:
+        print("No matching results found.")
+        return
+
+    print(f"{'type':<18} {'id':<10} {'name':<32} extra")
+    print("-" * 88)
+    for row in rows:
+        print(
+            f"{row.get('type', ''):<18} "
+            f"{str(row.get('id', '')):<10} "
+            f"{str(row.get('name', ''))[:31]:<32} "
+            f"{row.get('extra', '')}"
+        )
+
+
+def normalize_seasons(data: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = []
+    for season in data.get("seasons", []):
+        rows.append(
+            {
+                "type": "season",
+                "id": season.get("id"),
+                "name": season.get("name") or season.get("year"),
+                "extra": f"year={season.get('year')}" if season.get("year") else "",
+            }
+        )
+    return rows
+
+
+def normalize_teams(teams: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "team",
+            "id": team.get("id"),
+            "name": team.get("name") or team.get("shortName"),
+            "extra": team.get("country", {}).get("name") or team.get("slug") or "",
+        }
+        for team in teams
+    ]
+
+
+def normalize_players(roster: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows = []
+    for item in roster:
+        player = item.get("player", item)
+        position = item.get("position") or player.get("position") or ""
+        team = player.get("team", {}).get("name") or ""
+        rows.append(
+            {
+                "type": "player",
+                "id": player.get("id"),
+                "name": player.get("name") or player.get("shortName"),
+                "extra": ", ".join(part for part in [f"position={position}" if position else "", f"team={team}" if team else ""] if part),
+            }
+        )
+    return rows
+
+
+def lookup_ids_from_url(url: str) -> list[dict[str, Any]]:
+    explicit_ids = re.findall(r"(?:id:|#id:)(\d+)", url)
+    path_numbers = re.findall(r"/(\d+)(?:[/?#]|$)", url)
+    all_ids = []
+    for value in explicit_ids + path_numbers:
+        if value not in all_ids:
+            all_ids.append(value)
+
+    return [
+        {
+            "type": "url-id",
+            "id": value,
+            "name": "possible Sofascore ID",
+            "extra": "Use context from the URL to decide whether this is a tournament, team, player, or match ID.",
+        }
+        for value in all_ids
+    ]
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Six-layer Sofascore scraper: tournament -> season -> team -> position -> player -> metrics"
     )
-    parser.add_argument("--tournament-type", required=True, choices=[item.value for item in TournamentType])
-    parser.add_argument("--tournament", required=True, type=int, help="Sofascore unique tournament ID")
+    parser.add_argument(
+        "--lookup",
+        choices=["common-tournaments", "url", "seasons", "teams", "players"],
+        help="Find Sofascore IDs instead of scraping data",
+    )
+    parser.add_argument("--url", help="Sofascore URL for --lookup url")
+    parser.add_argument("--limit", type=int, default=10, help="Maximum lookup rows to print")
+    parser.add_argument("--tournament-type", choices=[item.value for item in TournamentType])
+    parser.add_argument("--tournament", type=int, help="Sofascore unique tournament ID")
     parser.add_argument("--season", type=int, default=None, help="Sofascore season ID. Latest season is used if omitted.")
     parser.add_argument("--season-name", default=None, help="Optional season label for output metadata")
+    parser.add_argument("--team", type=int, help="Single team ID for --lookup players")
     parser.add_argument("--teams", default=None, help="Comma-separated team IDs. Omit to scrape all teams.")
     parser.add_argument(
         "--positions",
@@ -483,6 +584,62 @@ async def run_from_config(config: ScrapeConfig) -> dict[str, Any]:
         await playwright.stop()
 
 
+async def run_lookup(args: argparse.Namespace) -> None:
+    if args.lookup == "common-tournaments":
+        print_lookup_rows(COMMON_TOURNAMENTS, args.limit)
+        return
+
+    if args.lookup == "url":
+        if not args.url:
+            raise SystemExit("--lookup url requires --url")
+        print_lookup_rows(lookup_ids_from_url(args.url), args.limit)
+        return
+
+    config = ScrapeConfig(
+        tournament_type=TournamentType.LEAGUE,
+        tournament_id=args.tournament or 0,
+        max_concurrency=1,
+        min_delay=args.min_delay,
+        max_delay=args.max_delay,
+        headless=not args.show_browser,
+    )
+    playwright, browser, context = await create_browser(config.headless)
+    client = BrowserApiClient(context, config)
+    try:
+        bootstrap = await context.new_page()
+        print("[Browser] Opening sofascore.com to establish session ...")
+        await bootstrap.goto("https://www.sofascore.com/", wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT_MS)
+        await asyncio.sleep(2)
+        await bootstrap.close()
+        await client.start()
+
+        if args.lookup == "seasons":
+            if not args.tournament:
+                raise SystemExit("--lookup seasons requires --tournament")
+            data = await client.get(f"/unique-tournament/{args.tournament}/seasons")
+            print_lookup_rows(normalize_seasons(data), args.limit)
+            return
+
+        scraper = HierarchicalScraper(client, config)
+        if args.lookup == "teams":
+            if not args.tournament or not args.season:
+                raise SystemExit("--lookup teams requires --tournament and --season")
+            teams = await scraper.fetch_teams(args.season)
+            print_lookup_rows(normalize_teams(teams), args.limit)
+            return
+
+        if args.lookup == "players":
+            if not args.team:
+                raise SystemExit("--lookup players requires --team")
+            roster = await scraper.fetch_team_players(args.team)
+            print_lookup_rows(normalize_players(roster), args.limit)
+            return
+    finally:
+        await client.close()
+        await browser.close()
+        await playwright.stop()
+
+
 def save_json(data: dict[str, Any], out_dir: str) -> Path:
     path = Path(out_dir)
     path.mkdir(parents=True, exist_ok=True)
@@ -496,6 +653,13 @@ def save_json(data: dict[str, Any], out_dir: str) -> Path:
 
 def main() -> None:
     args = build_parser().parse_args()
+    if args.lookup:
+        asyncio.run(run_lookup(args))
+        return
+
+    if not args.tournament_type or not args.tournament:
+        raise SystemExit("--tournament-type and --tournament are required unless --lookup is used")
+
     config = ScrapeConfig(
         tournament_type=TournamentType(args.tournament_type),
         tournament_id=args.tournament,

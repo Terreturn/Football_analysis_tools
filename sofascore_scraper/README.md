@@ -51,6 +51,67 @@ Supported metric groups:
 - `goalkeeping`
 - `all`
 
+## Finding Sofascore IDs
+
+You do not need to know every ID in advance. Start with the built-in common
+tournament list, then drill down by season, team, and player.
+
+List common tournament IDs:
+
+```bash
+python3 hierarchical_scraper.py --lookup common-tournaments --limit 20
+```
+
+Extract possible IDs from a Sofascore URL:
+
+```bash
+python3 hierarchical_scraper.py \
+  --lookup url \
+  --url "https://www.sofascore.com/team/football/manchester-united/35"
+```
+
+List seasons for a known tournament:
+
+```bash
+python3 hierarchical_scraper.py \
+  --lookup seasons \
+  --tournament 17 \
+  --limit 10
+```
+
+List teams for a known tournament and season:
+
+```bash
+python3 hierarchical_scraper.py \
+  --lookup teams \
+  --tournament 17 \
+  --season 61627 \
+  --limit 30
+```
+
+List players for a known team:
+
+```bash
+python3 hierarchical_scraper.py \
+  --lookup players \
+  --team 35 \
+  --limit 40
+```
+
+Recommended workflow:
+
+```text
+common tournament ID or Sofascore URL
+  -> list seasons
+    -> list teams
+      -> list players
+        -> run scrape
+```
+
+Sofascore can rate-limit or block some discovery endpoints. If a lookup returns
+`403`, wait a few minutes, lower request frequency, or use a Sofascore page URL
+with `--lookup url`.
+
 ## Hierarchical Usage
 
 Scrape all Premier League players for the latest season:
