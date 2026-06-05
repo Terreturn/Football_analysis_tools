@@ -5,9 +5,8 @@ Chromium browser, establishes a Sofascore session, and sends API requests from
 inside the browser page so requests carry normal cookies, headers, and browser
 fingerprints.
 
-The folder contains two entry points:
+The folder contains one scraper entry point:
 
-- `sofascore_scraper.py`: original match/player focused scraper.
 - `hierarchical_scraper.py`: six-layer scraper for tournament, season, team,
   position, player, and metric-group workflows.
 
@@ -157,48 +156,6 @@ sofascore_hierarchy_<tournament_id>_<season_id>_<timestamp>.json
     }
   ]
 }
-```
-
-## Original Scraper Usage
-
-All player stats for a league on a date:
-
-```bash
-python3 sofascore_scraper.py \
-  --mode daily_league \
-  --date 2025-05-15 \
-  --league 17 \
-  --out csv
-```
-
-All player stats for one match:
-
-```bash
-python3 sofascore_scraper.py \
-  --mode match_detail \
-  --match 12695944 \
-  --out json
-```
-
-One player's stats in one match:
-
-```bash
-python3 sofascore_scraper.py \
-  --mode player_match \
-  --player 839956 \
-  --match 12695944 \
-  --out csv
-```
-
-One player's season-level stats:
-
-```bash
-python3 sofascore_scraper.py \
-  --mode player_season \
-  --player 839956 \
-  --league 17 \
-  --season 61627 \
-  --out both
 ```
 
 ## Concurrency and Anti-Blocking Notes

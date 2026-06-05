@@ -146,6 +146,7 @@ class BrowserApiClient:
     async def start(self) -> None:
         for _ in range(max(1, self.config.max_concurrency)):
             page = await self.context.new_page()
+            await page.goto("https://www.sofascore.com/", wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT_MS)
             await self._pages.put(page)
 
     async def close(self) -> None:
@@ -355,7 +356,7 @@ class HierarchicalScraper:
 
         profile_task = self.client.get(f"/player/{player_id}")
         metrics_task = self.client.get(
-            f"/player/{player_id}/tournament/{self.config.tournament_id}"
+            f"/player/{player_id}/unique-tournament/{self.config.tournament_id}"
             f"/season/{season_id}/statistics/overall"
         )
         profile_raw, metrics_raw = await asyncio.gather(profile_task, metrics_task)
